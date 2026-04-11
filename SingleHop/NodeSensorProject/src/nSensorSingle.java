@@ -167,41 +167,44 @@ public class nSensorSingle {
     // ----------------------------------------------------------------
     // PROCESS COMMANDS dari BS
     // ----------------------------------------------------------------
-    public void prosesHello(String[] splitPesan, long destinationAddress, long t2) throws Exception {
-        long t1 = Long.parseLong(splitPesan[2]);
-        long t3 = Time.currentTimeMillis();
-        String message = "001" + " " + t1 + " " + t2 + " " + t3;
-        startTransmitter(fio, message, sequenceNumber++, destinationAddress);
-    }
+    public void prosesHello(String splitPesan[], long destinationAddress, long t2) throws Exception
+   	{	
+   		// Format pesan : 001 t1 t1_kirim
+   		long t1 = Long.parseLong(splitPesan[2]);
+   		String message = "001" + " " + t1 + " " + t2; 
+   		startTransmitter(fio, message, sequenceNumber++, destinationAddress);
+   	}
+   	
+   	public void prosesSinkronisasiWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception
+   	{ // format pesan: 010 deltaDelay t1
+   		long deltat3t2 = Time.currentTimeMillis() - t2;
+   		Time.setCurrentTimeMillis( Long.parseLong(splitPesan[2]) + Long.parseLong(splitPesan[1]) + deltat3t2);
 
-    public void prosesSinkronisasiWaktu(String[] splitPesan, long destinationAddress, long t2) throws Exception {
-        long tBS   = Long.parseLong(splitPesan[1]);
-        long delta = Long.parseLong(splitPesan[2]);
-        long deltat3t2 = Time.currentTimeMillis() - t2;
-        Time.setCurrentTimeMillis(tBS + delta + deltat3t2);
-
-        String message = "010" + " " + deltat3t2 + " " + Time.currentTimeMillis();
-        startTransmitter(fio, message, sequenceNumber++, destinationAddress);
-    }
-
-    public void prosesDapatkanWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception {
-        long t1 = Long.parseLong(splitPesan[2]);
-        String message = "011" + " " + t1 + " " + t2;
-        startTransmitter(fio, message, sequenceNumber++, destinationAddress);
-    }
+   		// format pesan reply : 010 t2 t3 (time after set)
+   		String message = "010" + " " + deltat3t2 + " " + (Time.currentTimeMillis());
+   		startTransmitter(fio, message, sequenceNumber++, destinationAddress); 
+   	}
+   	
+   	public void prosesDapatkanWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception
+   	{ // untuk memproses Get time NOW
+   	  // Format pesan: 011 t1 t1_kirim
+   	 
+   		long t1 = Long.parseLong(splitPesan[2]);
+   		String message = "011" + " " + t1 + " " + t2;
+   		startTransmitter(fio, message, sequenceNumber++, destinationAddress);
+   	}
 
     // ----------------------------------------------------------------
     // GO SENSING -> sensing dan kirim langsung ke BS
     // ----------------------------------------------------------------
-    public void goSensing() throws Exception {
+   	public void goSensing() throws Exception {
         new Thread() {
             public void run() {
-            	 try {
-                     // Random delay 0-500ms supaya tidak tabrakan
-                     long backoff = (long)(Time.currentTimeMillis() % 500);
-                     Thread.sleep(backoff);
-                 } catch (InterruptedException e) {}
-
+                try {
+                    initializeTEMPERATURE();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 while (!exit) {
                     try {
                         long waktuSensing = Time.currentTimeMillis();
@@ -225,6 +228,7 @@ public class nSensorSingle {
             }
         }.start();
     }
+
 
     // ----------------------------------------------------------------
     // SINGLE HOP -> langsung ke BS
