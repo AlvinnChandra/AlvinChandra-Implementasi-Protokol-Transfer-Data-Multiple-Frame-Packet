@@ -1,0 +1,16 @@
+-d
+"C:\\Users\\Alvin Chandra\\eclipse-workspace\\MultiHopNode\\build\\context1\\classes"
+-classpath
+"C:\\Users\\Alvin Chandra\\eclipse-workspace\\MultiHopNode\\build\\context1\\classes;C:\\Users\\Alvin Chandra\\eclipse-workspace\\MultiHopNode\\targets\\Preon32_1.5\\lib\\rtx.jar"
+-sourcepath
+"C:\\Users\\Alvin Chandra\\eclipse-workspace\\MultiHopNode\\src"
+-target
+1.8
+-bootclasspath
+"C:\\Users\\Alvin Chandra\\eclipse-workspace\\MultiHopNode\\targets\\Preon32_1.5\\lib\\rt.jar"
+-encoding
+ISO-8859-1
+-g:lines,vars,source
+-source
+1.8
+"C:\\Users\\Alvin Chandra\\eclipse-workspace\\MultiHopNode\\src\\nSensorMulti.java"
