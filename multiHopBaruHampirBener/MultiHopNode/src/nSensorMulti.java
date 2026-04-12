@@ -219,7 +219,9 @@ public class nSensorMulti {
         Time.setCurrentTimeMillis(t1 + delta + deltat3t2);
         long t3 = Time.currentTimeMillis();
         System.out.println(stringFormatTime.SFFull(t3));
-        String msg = "010 " + deltat3t2 + " " + t3;
+        // Format: "010 <deltat3t2> <dummy> <t3>"
+        // progBS dispatch case 2 ambil split[3] = t3
+        String msg = "010 " + deltat3t2 + " 0 " + t3;
         sendToBS(msg, sequenceNumber++, myAddress);
     }
 
