@@ -1,4 +1,8 @@
 import java.io.IOException;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Lock;
 
@@ -47,7 +51,6 @@ public class nSensorSingle {
 
     volatile boolean exit = false;
 
-    // Inisialisasi LED, Radio, FrameIO, Temperature, Sequence Number
     public void initializeLED() throws Exception {
         shuttle = Shuttle.getInstance();
         ledMerah = shuttle.getLED(Shuttle.LED_RED);
@@ -78,10 +81,21 @@ public class nSensorSingle {
         sequenceNumber = 0;
     }
 
-    // ----------------------------------------------------------------
-    // RECEIVER -> terima frame masuk
-    // ----------------------------------------------------------------
-    public void startReceiver(final FrameIO fio) {
+    //Buffer
+    int bufferSize = 60;
+    int bufferTimeout = 5000;
+
+    String[] dataBuffer = new String[bufferSize];
+    int[] snBUffer = new int[bufferSize];
+    int bufferCount = 0;
+    long lastFlushTime = 0;
+
+    //Ack
+    Map<Integer, String> unackMap = new HashMap<Integer, String>(); 
+    int highestAckSN = -1;
+    Object mapLock = new Object();
+
+    public void startReceiver(FrameIO fio) {
         Frame frame = new Frame();
         boolean stop = false;
         int snSebelumnya = -1;
@@ -101,7 +115,7 @@ public class nSensorSingle {
         }
     }
 
-    public void dispatchFrame(final Frame frame, final long t2) throws Exception {
+    public void dispatchFrame(Frame frame, long t2) throws Exception {
         new Thread() {
             final Lock lock = new ReentrantLock();
 
@@ -113,17 +127,22 @@ public class nSensorSingle {
                         String pesanDiterima = new String(payloadBytes, 0, payloadBytes.length);
                         String[] splitPesan = StringUtils.split(pesanDiterima, " ");
 
-                        if (splitPesan[0].equalsIgnoreCase("001"))
-                            code = 1;
-                        else if (splitPesan[0].equalsIgnoreCase("010"))
-                            code = 2;
-                        else if (splitPesan[0].equalsIgnoreCase("011"))
-                            code = 3;
-                        else if (splitPesan[0].equalsIgnoreCase("100"))
-                            code = 4;
-                        else if (splitPesan[0].equalsIgnoreCase("111"))
-                            code = 5;
-
+                        if (splitPesan[0].equalsIgnoreCase("001")) {
+                        	code = 1;
+                        } else if (splitPesan[0].equalsIgnoreCase("010")) {
+                        	code = 2;
+                        } else if (splitPesan[0].equalsIgnoreCase("011")) {
+                        	code = 3;
+                        } else if (splitPesan[0].equalsIgnoreCase("100")) {
+                        	code = 4;
+                        } else if (splitPesan[0].equalsIgnoreCase("STOP")) {
+                        	code = 5; // Stop
+                        } else if (splitPesan[0].equalsIgnoreCase("110")) {
+                        	code = 6;  // CUMACK
+                        } else if (splitPesan[0].equalsIgnoreCase("111")) {
+                        	code = 7;  // NACK / retransmit request
+                        }
+                        
                         switch (code) {
                             case 1: {
                                 prosesHello(splitPesan, frame.getSrcAddr(), t2);
@@ -155,6 +174,21 @@ public class nSensorSingle {
                                 }
                                 break;
                             }
+                            case 6: {
+                                // Format pesan: 110 <ackedSN>
+                                // BS mengirim ACK kumulatif: semua frame s.d. ackedSN sudah diterima
+                                int ackedSN = Integer.parseInt(splitPesan[1]);
+                                processCumACK(ackedSN);
+                                break;
+                            }
+                            case 7: {
+                                // Format pesan: 111 <snStart> <snEnd>
+                                // BS meminta pengiriman ulang frame dari snStart s.d. snEnd
+                                int snStart = Integer.parseInt(splitPesan[1]);
+                                int snEnd   = Integer.parseInt(splitPesan[2]);
+                                retransmit(snStart, snEnd, frame.getSrcAddr());
+                                break;
+                            }
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -164,59 +198,121 @@ public class nSensorSingle {
         }.start();
     }
 
-    // ----------------------------------------------------------------
-    // PROCESS COMMANDS dari BS
-    // ----------------------------------------------------------------
-    public void prosesHello(String splitPesan[], long destinationAddress, long t2) throws Exception
-   	{	
-   		// Format pesan : 001 t1 t1_kirim
-   		long t1 = Long.parseLong(splitPesan[2]);
-   		String message = "001" + " " + t1 + " " + t2; 
-   		startTransmitter(fio, message, sequenceNumber++, destinationAddress);
-   	}
-   	
-   	public void prosesSinkronisasiWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception
-   	{ // format pesan: 010 deltaDelay t1
-   		long deltat3t2 = Time.currentTimeMillis() - t2;
-   		Time.setCurrentTimeMillis( Long.parseLong(splitPesan[2]) + Long.parseLong(splitPesan[1]) + deltat3t2);
+    public void processCumACK(int ackedSN) {
+    	synchronized (mapLock) {
+    		if(ackedSN <= highestAckSN) {
+    			return;
+    		}
+    		
+    		highestAckSN = ackedSN;
+    		
+    		List<Integer> toRemove = new ArrayList<Integer>(); 
+    		for(Integer sn: unackMap.keySet()) {
+    			if (sn <= ackedSN) {
+    				toRemove.add(sn);
+    			}
+    		}
+    		
+    		for(Integer sn: toRemove) {
+    			unackMap.remove(sn);
+    		}
+    		
+    		System.out.println("CUMACK diterima: " + ackedSN
+                    + " | sisa unacked: " + unackMap.size());
+    	}
+    }
 
-   		// format pesan reply : 010 t2 t3 (time after set)
-   		String message = "010" + " " + deltat3t2 + " " + (Time.currentTimeMillis());
-   		startTransmitter(fio, message, sequenceNumber++, destinationAddress); 
-   	}
-   	
-   	public void prosesDapatkanWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception
-   	{ // untuk memproses Get time NOW
-   	  // Format pesan: 011 t1 t1_kirim
-   	 
-   		long t1 = Long.parseLong(splitPesan[2]);
-   		String message = "011" + " " + t1 + " " + t2;
-   		startTransmitter(fio, message, sequenceNumber++, destinationAddress);
-   	}
-
-    // ----------------------------------------------------------------
-    // GO SENSING -> sensing dan kirim langsung ke BS
-    // ----------------------------------------------------------------
-   	public void goSensing() throws Exception {
+    public void retransmit(int snStart, int snEnd, long destAddr) {
         new Thread() {
             public void run() {
-                try {
-                    initializeTEMPERATURE();
-                } catch (Exception e) {
-                    e.printStackTrace();
+                final Map<Integer, String> toRetransmit = new HashMap<Integer, String>();
+                synchronized (mapLock) {
+                    for (int sn = snStart; sn <= snEnd; sn++) {
+                        String payload = (String) unackMap.get(sn);
+                        if (payload != null) {
+                            toRetransmit.put(sn, payload);
+                        }
+                    }
                 }
+
+                // Tahap 2: kirim ulang di luar lock
+                for (int sn = snStart; sn <= snEnd; sn++) {
+                    String payload = (String) toRetransmit.get(sn);
+                    if (payload != null) {
+                        try {
+                            Thread.sleep(20);
+                        } catch (InterruptedException e) {}
+                        sendFrameSingleHop(fio, payload, sn);
+                        System.out.println("Retransmit SN=" + sn);
+                    }
+                }
+            }
+        }.start();
+    }
+
+    public void prosesHello(String splitPesan[], long destinationAddress, long t2) throws Exception {
+        // Format pesan masuk : 001 t1 t1_kirim
+        long t1 = Long.parseLong(splitPesan[2]);
+        String message = "001" + " " + t1 + " " + t2;
+        startTransmitter(fio, message, sequenceNumber++, destinationAddress);
+    }
+
+    public void prosesSinkronisasiWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception {
+        // Format pesan masuk: 010 deltaDelay t1
+        long deltat3t2 = Time.currentTimeMillis() - t2;
+        Time.setCurrentTimeMillis(Long.parseLong(splitPesan[2]) + Long.parseLong(splitPesan[1]) + deltat3t2);
+
+        // Format pesan balik: 010 deltat3t2 waktuSekarang
+        String message = "010" + " " + deltat3t2 + " " + (Time.currentTimeMillis());
+        startTransmitter(fio, message, sequenceNumber++, destinationAddress);
+    }
+
+    public void prosesDapatkanWaktu(String splitPesan[], long destinationAddress, long t2) throws Exception {
+        // Format pesan masuk: 011 t1 t1_kirim
+        long t1 = Long.parseLong(splitPesan[2]);
+        String message = "011" + " " + t1 + " " + t2;
+        startTransmitter(fio, message, sequenceNumber++, destinationAddress);
+    }
+
+    public void goSensing() throws Exception {
+        new Thread() {
+            public void run() {
+                lastFlushTime = Time.currentTimeMillis();
+
                 while (!exit) {
                     try {
                         long waktuSensing = Time.currentTimeMillis();
                         float suhu = sensorSuhu.getTemperatureCelsius();
 
+                        int s = (int)(suhu * 100);
+                        int desimal = Math.abs(s % 100);
+                        String desimalStr;
+
+                        if (desimal < 10) {
+                            desimalStr = "0" + desimal;
+                        } else {
+                            desimalStr = "" + desimal;
+                        }
+                        
+                        String suhuStr = (s / 100) + "." + desimalStr;
+
                         String dataSensing = Integer.toHexString(myAddress) + " " +
                                              stringFormatTime.SFFull(waktuSensing) +
-                                             " TEMP:" + suhu + "C";
+                                             " TEMP:" + suhuStr + "°C";
 
-                        int snSekarang = sequenceNumber++;
-                        if(sequenceNumber > 255) sequenceNumber = 0;
-                        sendFrameSingleHop(fio, dataSensing, snSekarang);
+                        synchronized (dataBuffer) {
+                            snBUffer[bufferCount] = sequenceNumber;
+                            dataBuffer[bufferCount] = dataSensing;
+                            bufferCount++;
+                            sequenceNumber++;
+                            if (sequenceNumber > 255) {
+                                sequenceNumber = 0;
+                            }
+
+                            if (bufferCount >= bufferSize) {
+                                flushBuffer();
+                            }
+                        }
 
                         Thread.sleep(1000);
 
@@ -224,16 +320,73 @@ public class nSensorSingle {
                         e.printStackTrace();
                     } catch (InterruptedException e) {}
                 }
+
+                // Flush sisa buffer saat exit
+                synchronized (dataBuffer) {
+                    if (bufferCount > 0) {
+                        flushBuffer();
+                    }
+                }
+
                 System.out.println("Keluar");
             }
         }.start();
     }
 
+    private void flushBuffer() {
+        if (bufferCount == 0) return;
 
-    // ----------------------------------------------------------------
-    // SINGLE HOP -> langsung ke BS
-    // ----------------------------------------------------------------
-    public void sendFrameSingleHop(final FrameIO fio, String msg, int sn) {
+        int start = 0;
+        while (start < bufferCount) {
+            StringBuilder sb = new StringBuilder();
+            int count = 0;
+            for (int i = start; i < bufferCount; i++) {
+                String entry = "SN:" + snBUffer[i] + " " + dataBuffer[i];
+                String candidate;
+
+                if (sb.length() > 0) {
+                    candidate = "PKT:" + (count + 1) + "|" +
+                                sb.toString() + "|" + entry;
+                } else {
+                    candidate = "PKT:" + (count + 1) + "|" +
+                                entry;
+                }
+                
+                if (candidate.getBytes().length > 107) {
+                	break;
+                }
+                if (sb.length() > 0) {
+                	sb.append("|");
+                }
+                sb.append(entry);
+                count++;
+            }
+
+            if (count == 0) {
+                start++;
+                continue;
+            }
+
+            String payload = "PKT:" + count + "|" + sb.toString();
+            int frameSN = sequenceNumber++;
+            if (sequenceNumber > 255) sequenceNumber = 0;
+
+            // Simpan ke unackMap sebelum kirim
+            synchronized (mapLock) {
+                unackMap.put(frameSN, payload);
+            }
+
+            sendFrameSingleHop(fio, payload, frameSN);
+            System.out.println("Flush " + count + " data, frame SN=" + frameSN);
+            start += count;
+        }
+
+        bufferCount = 0;
+        lastFlushTime = Time.currentTimeMillis();
+    }
+
+  
+    public void sendFrameSingleHop(FrameIO fio, String msg, int sn) {
         boolean isOK = false;
         while (!isOK) {
             try {
@@ -248,22 +401,17 @@ public class nSensorSingle {
                 radio.setState(AT86RF231.STATE_TX_ARET_ON);
                 fio.transmit(frame);
                 isOK = true;
+                System.out.println("Terkirim SN=" + sn);
             } catch (RadioDriverException e) {
                 e.printStackTrace();
             } catch (NoAckException e) {
-                try { Thread.sleep(Time.currentTimeMillis() % 200); } catch (InterruptedException ie) {}
             } catch (ChannelBusyException e) {
-                try { Thread.sleep(Time.currentTimeMillis() % 200); } catch (InterruptedException ie) {}
             } catch (IOException e) {
-                e.printStackTrace();
             }
         }
     }
 
-    // ----------------------------------------------------------------
-    // TRANSMITTER -> kirim reply ke BS
-    // ----------------------------------------------------------------
-    private void startTransmitter(final FrameIO fio, final String mesg, final int sn, final long destADDR) {
+    public void startTransmitter(FrameIO fio, String mesg, int sn, long destADDR) {
         new Thread() {
             public void run() {
                 boolean isOK = false;
