@@ -80,7 +80,7 @@ public class nSensorMulti {
         sequenceNumber = 0;
     }
 
-    public void startReceiver(final FrameIO fio) {
+    public void startReceiver(FrameIO fio) {
         Frame frame = new Frame();
         int snSebelumnya = -1;
         while (true) {
@@ -100,7 +100,7 @@ public class nSensorMulti {
         }
     }
 
-    public void dispatchFrame(final Frame frame, final long t2) throws Exception {
+    public void dispatchFrame(Frame frame, long t2) throws Exception {
         new Thread() {
         	final Lock lock = new ReentrantLock();
             public void run() {
@@ -255,7 +255,7 @@ public class nSensorMulti {
     }
 
     // Kirim reply command (001/010/011) ke nextHop (node B)
-    public void sendReplyToNextHop(final String msg, final int sn) {
+    public void sendReplyToNextHop(String msg, int sn) {
         new Thread() {
             public void run() {
                 boolean ok = false;
@@ -285,7 +285,7 @@ public class nSensorMulti {
     }
 
     // Kirim data SENSE ke next Hop (Node B)
-    public void sendSenseToNextHop(final String msg, final int sn) throws InterruptedException {
+    public void sendSenseToNextHop(String msg, int sn) throws InterruptedException {
         boolean ok = false;
         while (!ok) {
             try {

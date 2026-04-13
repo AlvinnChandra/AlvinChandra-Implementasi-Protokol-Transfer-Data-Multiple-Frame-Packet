@@ -87,7 +87,7 @@ public class nSensorMulti {
         sequenceNumber = 0;
     }
 
-    public void startReceiver(final FrameIO fio) {
+    public void startReceiver(FrameIO fio) {
         Frame frame = new Frame();
         int snSebelumnya = -1;
         while (true) {
@@ -107,7 +107,7 @@ public class nSensorMulti {
         }
     }
 
-    public void dispatchFrame(final Frame frame, final long t2) throws Exception {
+    public void dispatchFrame(Frame frame, long t2) throws Exception {
         new Thread() {
         	final Lock lock = new ReentrantLock();
         	
@@ -240,7 +240,7 @@ public class nSensorMulti {
     // RELAY ke AFFE (forward command dari BS ke affe)
     // Kirim frame dengan srcAddr = myAddress (bafe), destAddr = affe
     // ----------------------------------------------------------------
-    public void relayToPrevHop(final String msg, final int sn) throws InterruptedException {
+    public void relayToPrevHop(String msg, int sn) throws InterruptedException {
         boolean ok = false;
         while (!ok) {
             try {
@@ -266,7 +266,7 @@ public class nSensorMulti {
         }
     }
     
-    public void relayToNextHop(final String msg, final int sn, final long originalSrcAddr) {
+    public void relayToNextHop(String msg, int sn, long originalSrcAddr) {
         new Thread() {
             public void run() {
                 boolean ok = false;

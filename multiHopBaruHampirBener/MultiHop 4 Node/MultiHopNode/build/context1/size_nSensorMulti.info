@@ -647,7 +647,7 @@
 	3		getTimeZone()Ljava/util/TimeZone;
 	3		isLenient()Z
 
-885		nSensorMulti
+869		nSensorMulti
 	177		relayToPrevHop(Ljava/lang/String;I)V
 	114		prosesSinkronisasiWaktu([Ljava/lang/String;J)V
 	109		<init>()V
@@ -660,7 +660,6 @@
 	22		initializeLED()V
 	22		initializeFrameIO()V
 	16		relayToNextHop(Ljava/lang/String;IJ)V
-	16		sendToBS(Ljava/lang/String;IJ)V
 	15		dispatchFrame(Lcom/virtenio/radio/ieee_802_15_4/Frame;J)V
 	11		main([Ljava/lang/String;)V
 	5		resetSequenceNumber()V
@@ -820,8 +819,8 @@
 	17		size()I
 	6		iterator()Ljava/util/Iterator;
 
-507		nSensorMulti$1
-	478		run()V
+504		nSensorMulti$1
+	475		run()V
 	29		<init>(LnSensorMulti;Lcom/virtenio/radio/ieee_802_15_4/Frame;J)V
 
 496		java/util/AbstractCollection
@@ -1159,10 +1158,6 @@
 
 216		nSensorMulti$2
 	193		run()V
-	23		<init>(LnSensorMulti;JILjava/lang/String;)V
-
-198		nSensorMulti$3
-	175		run()V
 	23		<init>(LnSensorMulti;JILjava/lang/String;)V
 
 191		java/util/AbstractSet
@@ -1640,14 +1635,6 @@
 	5		setExclusiveOwnerThread(Ljava/lang/Thread;)V
 	2		getExclusiveOwnerThread()Ljava/lang/Thread;
 
-12		com/virtenio/driver/gpio/GPIOException
-	6		<init>(I)V
-	6		<init>(Ljava/lang/Throwable;)V
-
-12		com/virtenio/driver/spi/SPIException
-	6		<init>(I)V
-	6		<init>(Ljava/lang/Throwable;)V
-
 12		com/virtenio/driver/cpu/CPUException
 	6		<init>(I)V
 	6		<init>(Ljava/lang/Throwable;)V
@@ -1656,7 +1643,15 @@
 	6		<init>(I)V
 	6		<init>(Ljava/lang/Throwable;)V
 
+12		com/virtenio/driver/gpio/GPIOException
+	6		<init>(I)V
+	6		<init>(Ljava/lang/Throwable;)V
+
 12		com/virtenio/driver/flash/FlashException
+	6		<init>(I)V
+	6		<init>(Ljava/lang/Throwable;)V
+
+12		com/virtenio/driver/spi/SPIException
 	6		<init>(I)V
 	6		<init>(Ljava/lang/Throwable;)V
 
